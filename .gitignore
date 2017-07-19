@@ -1,0 +1,28 @@
+# All OUTPUT files
+!OUTPUT/*
+!OUTPUT/.gitkeep
+!doc_work/
+OUTPUT/*
+*.ipynb_checkpoints
+*.png
+*.txt
+
+### Latex
+*.tex
+*.aux
+*.bbl
+*.log
+*.fdb_latexmk
+*.fls
+*.out
+*.gz
+*.blg
+*.nav
+*.snm
+*.thm
+*.toc
+
+### Tags
+*.tags
+*.tags1
+.DS_Store
