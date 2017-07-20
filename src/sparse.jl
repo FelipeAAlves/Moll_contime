@@ -105,7 +105,7 @@ function falves_sparse!{Tv,Ti<:Integer}(I::AbstractVector{Ti}, J::AbstractVector
         end
     end
 
-    SparseMatrixCSC(n, m, csrrowptr, csrcolval, csrnzval)
+    SparseMatrixCSC(m, n, csccolptr, cscrowval, cscnzval)
 end
 
 function falves_sparse!{Tv,Ti<:Integer}(I::AbstractVector{Ti}, J::AbstractVector{Ti}, V::AbstractVector{Tv},

@@ -1,4 +1,3 @@
-
 #=
 Some continuous time code
 
@@ -9,14 +8,33 @@ Some continuous time code
 References
 ----------
 
-    1)
+1)
 =#
-const __pars = Param()
+include("pars.jl")
+include("sparse.jl")
 
+# include("init.jl")
+# fd = FiniteDiff()
+# sol = Solution(fd)
+
+const __pars = Param()
+const _tol_hjb = 1e-8
+
+using Roots
+
+immutable Solution
+
+    ### Values
+    g::Vector{Float64}          # Density over state space
+    Vv::Vector{Float64}
+    V::Array{Float64,2}             # Value function
+    cons::Array{Float64,2}          # Optimal consumption
+    lsavings::Array{Float64,2}      # Savings
+end
 
 immutable FiniteDiff
 
-    ### asset grid
+    ### Asset grid
     bgrid::LinSpace{Float64}
     Δb::Float64
     nb::Int64
@@ -26,21 +44,10 @@ immutable FiniteDiff
     zmarkov::Matrix{Float64}
     nz::Int64
 
-    # zdist::Vector{Float64}
-    # zmarkov_diag::Vector{Float64}
-    # zmarkov_off::Matrix{Float64}
-
     ### Storage
     b̃ ::Vector{Float64}                                  # RHS of hjb
     # Λ ::Base.SparseMatrix.SparseMatrixCSC{Float64, Int}  # exogenous movements
     # P ::Base.SparseMatrix.SparseMatrixCSC{Float64, Int}  # storage matrix
-
-    g::Vector{Float64}          # Density over state space
-
-    Vv::Vector{Float64}
-    V::Array{Float64,2}             # Value function
-    cons::Array{Float64,2}          # Optimal consumption
-    lsavings::Array{Float64,2}      # Savings
 
     ### Sparse Representations _storage_
     I ::Vector{Int64}
@@ -69,37 +76,51 @@ immutable FiniteDiff
 
 end
 
-function FiniteDiff()
+function Solution(fd::FiniteDiff)
+    @unpack ρ = __pars
 
-    @unpack ρ, r, Δhjb = __pars
+    nb = fd.nb; nz = fd.nz;
+    Nn = nb * nz;
+    bgrid = fd.bgrid; zgrid = fd.zgrid;
+
+    ### Policies & value function
+    g = zeros(Nn); Vv = zeros(Nn)
+    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
+        ibz = ib + (iz-1)*fd.nb
+        Vv[ibz] = 1/ρ * utilfn( 0.03*bonds + zval )
+    end
+    V = reshape(Vv,nb,nz) ###  WARN WARN
+    cons = similar(V); lsavings = similar(V);
+
+    return Solution(g, Vv, V, cons, lsavings)
+
+end
+
+function FiniteDiff(;λ2 = 0.4)
+
+    @unpack ρ, Δhjb = __pars
 
     ### GRIDs
     zgrid = [.1, .2]; nz = 2
-    λ1 = 0.02;  λ2 = 0.03;
-    zmarkov = [ -λ1 λ1; λ2 -λ2]
+    λ1 = 0.6;
+    # λ2 = 0.4;
+    zmarkov = [ -λ1 λ1; λ2 -λ2] # generator matrix
 
-    nb = 500; bmin = -0.02; bmax = 2;
+    nb = 1000; bmin = -0.15; bmax = 4.;
     bgrid = linspace(bmin,bmax,nb)
     Δb = bgrid[2]-bgrid[1]
 
     Nn = nz*nb; m = Nn; n = Nn
 
-    ### Policies & value function
-    g = zeros(Nn); b̃ = zeros(Nn); Vv = zeros(Nn)
-    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
-        ibz = ib + (iz-1)*nb
-        Vv[ibz] = 1/ρ * utilfn( r*bonds + zval )
-    end
-    V = reshape(Vv,na,nz)
-    c = similar(V); ls = similar(V);
-
-
     ### Sparse matrices
+
+    # for the stochastic transition on RHS,RHS
     lambdas = ( kron(diag(zmarkov),ones(nb)), ones(nb)*λ1, ones(nb)*λ2 )
     Λ = spdiagm(lambdas, (0,nb,-nb))
     Iz, Jz, Valz = findnz(Λ); Nz = length(Iz)
 
-    ps = ( kron(-diag(zmarkov)+ρ+1/Δhjb,ones(nb)) , ones(nb)*-λ1, ones(nb)*-λ2 )
+    # for the HJB eq on the LHS,LHS
+    ps = ( ρ+1./Δhjb + kron(-diag(zmarkov),ones(nb)) , -ones(nb)*λ1, -ones(nb)*λ2 )
     P = spdiagm(ps, (0,nb,-nb))
     Ip, Jp, Valp = findnz(P); Np = length(Ip)
 
@@ -122,40 +143,20 @@ function FiniteDiff()
     cscrowval = Vector{Int64}()
     cscnzval = Vector{Float64}()
 
-    FiniteDiff(bgrid, Δb, nb, zgrid, zmarkov, nz, b̃, g, Vv, V, c, ls, I, J, Values, Iz, Jz, Valz, Nz, Ip, Jp, Valp, Np,
-               csrrowptr, csccolptr, klasttouch, cscrowval, cscnzval)
+    FiniteDiff(bgrid, Δb, nb, zgrid, zmarkov, nz, zeros(Nn),
+                # g, Vv, V, c, ls,
+                I, J, Values, Iz, Jz, Valz, Nz, Ip, Jp, Valp, Np,
+                csrrowptr, csccolptr, klasttouch, cscrowval, cscnzval)
 
 end
 
-function init_V!(V::Vector{Float64},fd)
-
-    @unpack ρ,r = __pars
-    zgrid, bgrid = fd.zgrid, fd.bgrid; nb = fd.nb
-
-    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
-        ibz = ib + (iz-1)*nb
-        V[ibz] = 1/ρ * utilfn( r*bonds + zval )
-    end
-
-end
-
-function init_V!(V::Matrix{Float64},fd)
-
-    @unpack ρ,r = __pars
-    zgrid, bgrid = fd.zgrid, fd.bgrid; nb = fd.nb
-
-    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
-        V[ib,iz] = 1/ρ * utilfn( r*bonds + zval )
-    end
-
-end
-
-
+#==================================#
+##             Utility             ##
+#==================================#
 utilfn(c) = 1/(1.-__pars.γ) * c^(1.-__pars.γ)
 inv_mu(dV) = dV^(-__pars.invγ)
 
-function inv_mu( dV, bond, zval )
-    @unpack r = __pars
+function inv_mu( dV, bond, zval, r)
 
     c = inv_mu(dV)
     ls   = r * bond + zval - c
@@ -164,8 +165,7 @@ function inv_mu( dV, bond, zval )
     return c, ls, utilV
 end
 
-function inv_mu!(MU, dV, bond, zval )
-    @unpack r = __pars
+function inv_mu!(MU, dV, bond, zval, r)
 
     MU[1] = inv_mu(dV)
     MU[2]   = r * bond + zval - MU[1]
@@ -173,6 +173,31 @@ function inv_mu!(MU, dV, bond, zval )
 
     return nothing
 end
+
+function init_V!(r, sol, fd)
+
+    @unpack ρ = __pars
+    zgrid, bgrid = fd.zgrid, fd.bgrid; nb = fd.nb
+    rr = max(r,0.001)
+
+    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
+        ibz = ib + (iz-1)*nb
+        sol.V[ibz] = 1/ρ * utilfn( rr*bonds + zval )
+    end
+
+end
+
+function init_V!(r, V::Matrix{Float64},fd)
+
+    @unpack ρ = __pars
+    zgrid, bgrid = fd.zgrid, fd.bgrid; nb = fd.nb
+
+    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
+        V[ib,iz] = 1/ρ * utilfn( r*bonds + zval )
+    end
+
+end
+
 ## *************************************************************************************
 ##   Functions
 ##
@@ -187,32 +212,168 @@ Find the steady state of the model
 - `arg1`
 
 """
-function solve_steady_state()
+function solve_steady_state(sol_, fd_)
 
+    f(r) = steady_state_resid(r, sol_, fd_)
+    return fzero(f, 0.01, 0.04)
 end
 
 
 """
-    Solve for the HJB equation
+    steady state bond market clearing residual
 """
-function solve_hjb(fd::FiniteDiff)
+function steady_state_resid(rr::Float64, sol::Solution, fd::FiniteDiff)
 
-    Vv = fd.Vv; V = fd.V
-    V_out = zeros(length(V))
+    #== Solve the HJB ==#
+    solve_hjb!(rr, sol, fd)
 
-    dist =  1.0
+    #== Solve the Stationary Distribution ==#
+    kfe_equation(sol.g, sol.lsavings, fd)
+
+    int_bonds = fd.Δb * repmat(fd.bgrid,fd.nz) .* sol.g
+    return sum(int_bonds)
+end
+
+
+fd  = FiniteDiff(λ2 = 0.4); sol = Solution(fd);
+fd_init  = FiniteDiff(λ2 = 0.4); sol_init = Solution(fd_init);
+fd_end  = FiniteDiff(λ2 = 0.8); sol_end = Solution(fd_end);
+
+r = solve_steady_state(sol, fd)
+r_init = solve_steady_state(sol_init, fd_init)
+r_end = solve_steady_state(sol_end, fd_end)
+
+function transition_dynamics(sol_init, sol_end, fd_end)
+
+    nb = fd_end.nb; nz = fd_end.nz; Nn = nb*nz
+    Δb = fd_end.Δb
+    In = speye(Nn)
+    Bgrid = repmat(fd.bgrid,fd.nz)
+
+    M = 50;
+    xM = ones(Float64,M)/M
+
+    #== Time index ==#
+    T = 50; ntime = 401;
+    Δt = T/(ntime-1);
+    ξ = 10.;
+    #== Create sol_transition ==#
+    sol_transition = Vector{Solution}(ntime);
+    sol_transition = Vector{Solution}(ntime);
+    for ii = 1:ntime
+        sol_transition[ii] = Solution(fd_end)
+    end
+    sol_transition[1].g .= sol_init.g;
+    sol_transition[end].Vv .= sol_end.Vv;
+
+    r_transition = zeros( ntime ); r_transition .= r_end; rnew_transition = zeros( ntime ); rnew_transition2 = zeros( ntime );
+    bond_mkt = zeros( ntime ); dbond_mkt = zeros( ntime);
+    V_out = zeros(Nn); dens = zeros(Nn);
+
+    bond_mkt_clear = 1.0
     it = 1
-    while distance < 1e-6 && it <= 1000
+    while bond_mkt_clear > 1e-5 && it<=10
 
-        updateV!(V_out, V, fd)
+        #== Iterate backwards on the HJB ==#
+        for tt in ntime-1:-1:1
 
-        distance = maxabs( V_out - Vv)
-        @printf(     "        value function iteration %d, distance %.4f \n", it, distance)
-        Vv .= V_out
+            V = sol_transition[tt+1].V;
+            Vv = sol_transition[tt+1].Vv;
 
-        (distance < 1e-6) && @printf("Value Function Converged, Iteration %d ", it)
+            #== update value function ==#
+            updateV!(V_out, V, sol_transition[tt], fd_end, r_transition[tt], 100.)
+
+            distance = maximum(abs, Vv - V_out)
+            @printf(     "        value function iteration %d, distance %.4f \n", tt, distance)
+
+            sol_transition[tt].Vv .= V_out ###  WARN WARN update V as well
+        end
+
+        #== Iterate forward on the KFE ==#
+        for tt in 2:ntime
+
+            dens .= sol_transition[tt-1].g
+            g_np1 = sol_transition[tt].g
+
+            A_t = kfe_equation(sol_transition[tt-1].lsavings, fd_end);
+
+            # A_ldiv_B!(lufact(In - Δt*A_t), dens) ###  CAREFUL: updates V_out in-place     ###
+            g_np1 .= (In - Δt*A_t)\dens;
+
+            bond_mkt[tt] = sum(Δb * Bgrid .* g_np1);
+            @printf(     "        kfe period %d, market clear %.4f \n", tt, bond_mkt[tt])
+        end
+
+
+
+        #Forward and backword approximations are used alternately because once
+        #the excess savings level becomes small enough, the "rounding error" can
+        #lead the update in the interest rate, and repeatedly adding the same
+        #rounding error can lead to a propagating error.
+        if mod(it,2)==0
+            dbond_mkt[1:ntime-1] = bond_mkt[2:ntime]-bond_mkt[1:ntime-1];
+            dbond_mkt[ntime] = bond_mkt[ntime]-bond_mkt[ntime-1];
+        else
+            dbond_mkt[2:ntime] = bond_mkt[2:ntime]-bond_mkt[1:ntime-1];
+            dbond_mkt[1] = dbond_mkt[2];
+        end
+        #Update the interest rate to reduce aggregate savings amount.
+        rnew_transition .= r_transition - ξ*dbond_mkt;
+
+        rnew_transition[ntime-5:ntime] = rnew_transition[ntime-5]; #This was done to minimize the "rounding error" at the end. Otherwise, the end point keeps decreasing
+
+        #To improve speed, for the first few updates, the update will be done
+        #fast, but to reduce wave pattern that gets created, updated interest
+        #rate will be smoothed (since the wave patern is due to how things are
+        #being updated). After getting "good" initial starting r_t, standard update
+        #with declining update weight will be used for convergence. Note that the
+        #smoothing will be stopped before the convergence.
+        if it<20
+            rnew_transition2 .= rnew_transition;
+            rnew_transition2[ntime-101:ntime] = r_end;                 #We know that r will approach the stationary value, so we will force smoothing around the stationary value.
+            rnew_transition2[101:ntime] .= QuantEcon.smooth(rnew_transition2[101:ntime],25)
+        # elseif it<60
+        #     rnew_transition(N-10:N)=r_st;
+        #     rnew_transition(100:N)=smooth(rnew_transition(100:N),10); #Amount of smooth will be reduced over time since not as strong of an update is necessary
+        # elseif it<100
+        #     rnew_transition(N-5:N)=r_st;
+        #     rnew_transition(100:N)=smooth(rnew_transition(100:N),5);
+        # elseif it==100
+        #     ξ=10*exp(-0.0006*(1:N));
+        # elseif it==150
+        #     ξ=10*exp(-0.00006*(1:N)); #Give bigger update weight to later times.
+        end
+
+        r_transition .= rnew_transition;
         it += 1
     end
+end
+
+"""
+    Solve for the HJB equation
+    #### Arguments
+    - `r`: interest rate
+    -
+"""
+function solve_hjb!(rr::Float64, sol::Solution, fd::FiniteDiff)
+
+    Vv = sol.Vv; V = sol.V
+    V_out = zeros(length(V))
+
+    distance =  1.0
+    it = 1
+    while distance > _tol_hjb && it <= 5000
+
+        #== update value function ==#
+        updateV!(V_out, V, sol, fd, rr)
+
+        distance = maximum(abs, V_out - Vv)
+        # @printf(     "        value function iteration %d, distance %.4f \n", it, distance)
+
+        Vv .= V_out ###  WARN WARN update V as well
+        it += 1
+    end
+    # (distance < _tol_hjb) && @printf("  Value Function Converged, Iteration %d \n ", it-1)
 
     return nothing
 end
@@ -228,9 +389,9 @@ end
 """
     UpdateV! loop version
 """
-function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, fd::FiniteDiff, LHS::Bool =true)
+function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd::FiniteDiff, rr::Float64, Δ::Float64 = 0.0, LHS::Bool =true)
 
-    @unpack r, Δhjb = __pars
+    @unpack Δhjb = __pars
 
     #== Info ==#
     nz = fd.nz; nb = fd.nb; Nn = nb*nz;
@@ -248,8 +409,8 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, fd::FiniteDiff, LH
         #== Backward derivative ==#
         if ib > 1
             dVb = (V[ib, iz] - V[ib-1, iz])/Δb
-            cb, lsb, util_b = inv_mu(dVb, bonds, zval)
-            # inv_mu!(MUb, dVb, bonds, zval )
+            cb, lsb, util_b = inv_mu(dVb, bonds, zval, rr)
+            # inv_mu!(MUb, dVb, bonds, zval, rr )
             # cb, lsb, util_b = MUb
         else
             lsb = 0.0; util_b = -1e12
@@ -259,8 +420,8 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, fd::FiniteDiff, LH
         #== Forward derivative ==#
         if ib < nb
             dVf = (V[ib+1, iz] - V[ib, iz])/Δb
-            cf, lsf, util_f = inv_mu( dVf, bonds, zval )
-            # inv_mu!(MUf, dVf, bonds, zval )
+            cf, lsf, util_f = inv_mu( dVf, bonds, zval, rr )
+            # inv_mu!(MUf, dVf, bonds, zval, rr )
             # cf, lsf, util_f = MUf
         else
             lsf = 0.0; util_f = -1e12
@@ -268,22 +429,22 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, fd::FiniteDiff, LH
         (lsf > 0.0) ? (valid_f = true) : (valid_f = false)
 
         #== No savings ==#
-        c0     = r * bonds + zval
+        c0     = rr * bonds + zval
         util_0 = utilfn(c0)
 
         #== DECIDE which one to use ==#
         if valid_b & (~valid_f | (util_b>util_f)) & (util_b > util_0)
-            fd.cons[ib,iz] = cb
-            fd.lsavings[ib,iz] = lsb
+            sol.cons[ib,iz] = cb
+            sol.lsavings[ib,iz] = lsb
         elseif valid_f & (~valid_b | (util_f>util_b) ) & (util_f > util_0)
-            fd.cons[ib,iz] = cf
-            fd.lsavings[ib,iz] = lsf
+            sol.cons[ib,iz] = cf
+            sol.lsavings[ib,iz] = lsf
         else
-            fd.cons[ib,iz] = c0
-            fd.lsavings[ib,iz] = 0.0
+            sol.cons[ib,iz] = c0
+            sol.lsavings[ib,iz] = 0.0
         end
 
-        lbdrift_b = min(fd.lsavings[ib,iz], 0.0); lbdrift_f = max(fd.lsavings[ib,iz], 0.0)
+        lbdrift_b = min(sol.lsavings[ib,iz], 0.0); lbdrift_f = max(sol.lsavings[ib,iz], 0.0)
 
         if lbdrift_b < 0.
             count += 1
@@ -329,7 +490,8 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, fd::FiniteDiff, LH
 
         ###  SOLVE the linear system
             ###  CASE 01
-            @. V_out = utilfn( vec(fd.cons) ) + 1/Δhjb * fd.Vv
+            (Δ == 0.) && (Δ = Δhjb)
+            @. V_out = utilfn( sol.cons[:] ) + 1./Δ * V[:]
             A_ldiv_B!(lufact(B_mat), V_out)                         ###  CAREFUL: updates V_out in-place     ###
 
         fill!(I,0); fill!(J,0); fill!(Values,0.0)
@@ -347,21 +509,24 @@ Solves for the invariant distribution
 - `arg1`
 
 """
-function solve_kfe(dens, lsavings, fd)
-
-    @unpack r, Δhjb = __pars
+function kfe_equation(lsavings, fd)
 
     #== Info ==#
     nz = fd.nz; nb = fd.nb; Nn = nb*nz;
     zgrid = fd.zgrid;
     bgrid = fd.bgrid; Δb = fd.Δb
 
+    #== Sparse matrix values ==#
+    I, J, Values = fd.I, fd.J, fd.Values
+    fill!(I,0); fill!(J,0); fill!(Values,0.0)
+
     count = 0
     for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
         ibz = ib + (iz-1)*nb
 
-        lbdrift_b = min(fd.lsavings[ib,iz], 0.0); lbdrift_f = max(fd.lsavings[ib,iz], 0.0)
+        lbdrift_b = min(lsavings[ib,iz], 0.0); lbdrift_f = max(lsavings[ib,iz], 0.0)
 
+        # i-1
         if lbdrift_b < 0.
             count += 1
             I[count] = ibz
@@ -369,12 +534,14 @@ function solve_kfe(dens, lsavings, fd)
             Values[count] = -lbdrift_b/Δb
         end
 
+        # i
         count += 1
         lval = (lbdrift_b - lbdrift_f)/Δb
         I[count] = ibz
         J[count] = ibz
         Values[count] = lval
 
+        # i+1
         if lbdrift_f > 0.
             count += 1
             I[count] = ibz
@@ -383,7 +550,7 @@ function solve_kfe(dens, lsavings, fd)
         end
     end
 
-    #== Add the diagonals ==#
+    #== Add the diagonals ONLY for the stochastic part ==#
     Nz = fd.Nz;
     Iz, Jz, Valz = fd.Iz, fd.Jz, fd.Valz
 
@@ -391,16 +558,77 @@ function solve_kfe(dens, lsavings, fd)
     J[count+1:count+Nz] .= Jz
     Values[count+1:count+Nz] .= Valz
 
+    ###  WARN invert J,I indexes
     A_transpose = falves_sparse!(J[1:count+Nz], I[1:count+Nz] , Values[1:count+Nz], Nn, Nn, +, fd.klasttouch,
             fd.csrrowptr, #csrcolval, csrnzval,
-            fd.csccolptr, fd.cscrowval, fd.
-
-
-    #== SOLVE for the stationary distribution ==#
-    dens[:] = 0.0; dens[1] = 1.0
-    A_transpose[1,:] .= 0.0; A[1,1] = 1.0
-    A_ldiv_B!(lufact(A_transpose), dens)                         ###  CAREFUL: updates V_out in-place     ###
+            fd.csccolptr, fd.cscrowval, fd.cscnzval)
 
     return A_transpose
 
+end
+function kfe_equation(dens, lsavings, fd)
+
+    #== Info ==#
+    nz = fd.nz; nb = fd.nb; Nn = nb*nz;
+    zgrid = fd.zgrid;
+    bgrid = fd.bgrid; Δb = fd.Δb
+
+    #== Sparse matrix values ==#
+    I, J, Values = fd.I, fd.J, fd.Values
+    fill!(I,0); fill!(J,0); fill!(Values,0.0)
+
+    count = 0
+    for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
+        ibz = ib + (iz-1)*nb
+
+        lbdrift_b = min(lsavings[ib,iz], 0.0); lbdrift_f = max(lsavings[ib,iz], 0.0)
+
+        # i-1
+        if lbdrift_b < 0.
+            count += 1
+            I[count] = ibz
+            J[count] = ibz -1
+            Values[count] = -lbdrift_b/Δb
+        end
+
+        # i
+        count += 1
+        lval = (lbdrift_b - lbdrift_f)/Δb
+        I[count] = ibz
+        J[count] = ibz
+        Values[count] = lval
+
+        # i+1
+        if lbdrift_f > 0.
+            count += 1
+            I[count] = ibz
+            J[count] = ibz+1
+            Values[count] = lbdrift_f/Δb
+        end
+    end
+
+    #== Add the diagonals ONLY for the stochastic part ==#
+    Nz = fd.Nz;
+    Iz, Jz, Valz = fd.Iz, fd.Jz, fd.Valz
+
+    I[count+1:count+Nz] .= Iz
+    J[count+1:count+Nz] .= Jz
+    Values[count+1:count+Nz] .= Valz
+
+    ###  WARN invert J,I indexes
+    A_transpose = falves_sparse!(J[1:count+Nz], I[1:count+Nz] , Values[1:count+Nz], Nn, Nn, +, fd.klasttouch,
+            fd.csrrowptr, #csrcolval, csrnzval,
+            fd.csccolptr, fd.cscrowval, fd.cscnzval)
+
+
+        #== SOLVE for the stationary distribution ==#
+        dens[:] = 0.0; dens[1] = 1.0
+        A_transpose[1,:] .= 0.0; A_transpose[1,1] = 1.0
+        A_ldiv_B!(lufact(A_transpose), dens) ###  CAREFUL: updates V_out in-place     ###
+
+        ###  NOTE:  distribution is solved in one-step onlu     ###
+
+        #== normalization ==#
+        mass = Δb*sum(dens)
+        dens .= dens/mass
 end

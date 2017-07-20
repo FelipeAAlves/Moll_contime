@@ -6,6 +6,5 @@ using Parameters
     ρ = 0.05
     γ = 2.0
     invγ = 1./γ
-    r = 0.03
-    Δhjb = 1000.
+    Δhjb = 100.
 end
