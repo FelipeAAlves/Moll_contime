@@ -21,6 +21,8 @@ const __pars = Param()
 const _tol_hjb = 1e-8
 
 using Roots
+using QuantEcon
+
 
 immutable Solution
 
@@ -212,9 +214,9 @@ Find the steady state of the model
 - `arg1`
 
 """
-function solve_steady_state(sol_, fd_)
+function solve_steady_state(sol, fd)
 
-    f(r) = steady_state_resid(r, sol_, fd_)
+    f(r) = steady_state_resid(r, sol, fd)
     return fzero(f, 0.01, 0.04)
 end
 
@@ -234,31 +236,96 @@ function steady_state_resid(rr::Float64, sol::Solution, fd::FiniteDiff)
     return sum(int_bonds)
 end
 
+# fd  = FiniteDiff(λ2 = 0.4); sol = Solution(fd);
+# fd_init  = FiniteDiff(λ2 = 0.4); sol_init = Solution(fd_init);
+# fd_end  = FiniteDiff(λ2 = 0.8); sol_end = Solution(fd_end);
+#
+# r_init = solve_steady_state(sol_init, fd_init)
+# rr_end = solve_steady_state(sol_end, fd_end)
+# BOND_mkt          = zeros(401, 201);
+# BOND_mkt_clear_dist = zeros(201);
+# R = zeros(401, 201);
+# Rnew = zeros(401, 201);
 
-fd  = FiniteDiff(λ2 = 0.4); sol = Solution(fd);
-fd_init  = FiniteDiff(λ2 = 0.4); sol_init = Solution(fd_init);
-fd_end  = FiniteDiff(λ2 = 0.8); sol_end = Solution(fd_end);
 
-r = solve_steady_state(sol, fd)
-r_init = solve_steady_state(sol_init, fd_init)
-r_end = solve_steady_state(sol_end, fd_end)
+# **************************************************************************************
+#   Plots
+#
+# ======================================================================================
+# writedlm("output/r_guess.txt", r_guess)
+# r_guess = squeeze(readdlm("output/r_guess.txt"),2)
+# sol_transition = transition_dynamics(R, BOND_mkt, BOND_mkt_clear_dist, sol_init, sol_end, rr_end, fd_end, r_guess)
+# #
+# ### Consumption
+# Plots.plot(fd.bgrid, [sol_init.cons sol_end.cons], w = 1.5,
+            # color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["c_unemp (low)" "c_emp (low)" "c_unemp (high)" "c_emp (high)"],
+            # xaxis = ("bonds",(-0.15, 1.5)), yaxis = ("c", (0.05,0.30)))
+# Plots.savefig("cons_policy.pdf")
 
-function transition_dynamics(sol_init, sol_end, fd_end)
+### Distributions
+#
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2) reshape(sol_end.g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (low)" "dist_emp (low)" "dist_unemp (high)" "dist_emp (high)"],
+#             xaxis = ("bonds",(-0.15, 0.50), -0.10:0.10:0.50), yaxis= ("density",(0.0,3.0) ) , legend = :right)
+# Plots.savefig("distribution.pdf")
+
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2)[:,2]*(0.6/(0.6+0.4))^(-1) reshape(sol_end.g,1000,2)[:,2]*(0.6/(0.6+0.8))^(-1) ], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_emp (low)" "dist_emp (high)"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,5.0) ) )
+#
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2) reshape(sol_transition[2].g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (init)" "dist_emp (init)" "dist_unemp" "dist_emp"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,3.0) ) )
+# Plots.savefig("distribution_t2.pdf")
+#
+# # t = 2.0
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2) reshape(sol_transition[17].g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (init)" "dist_emp (init)" "dist_unemp" "dist_emp"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,3.0) ) )
+# Plots.savefig("distribution_t17.pdf")
+
+# # t = 5.0
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2) reshape(sol_transition[41].g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (init)" "dist_emp (init)" "dist_unemp (41)" "dist_emp (41)"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,3.0) ) )
+# Plots.savefig("distribution_t41.pdf")
+#
+#
+# Plots.plot(fd.bgrid, [reshape(sol_end.g,1000,2) reshape(sol_transition[50].g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (end)" "dist_emp (end)" "dist_unemp (50)" "dist_emp (50)"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,3.0) ) )
+
+# Plots.plot(fd.bgrid, [reshape(sol_init.g,1000,2) reshape(sol_transition[100].g,1000,2)], w = 1.5,
+#             color=[:red :blue :red :blue], style = [:dash :dash :solid :solid], label=["dist_unemp (init)" "dist_emp (init)" "dist_unemp (25)" "dist_emp (25)"],
+#             xaxis = ("bonds",(-0.15, 0.50)), yaxis= ("density",(0.0,3.0) ) )
+#
+
+# time = linspace(-0.25, 50., 403)
+# Plots.plot(time, [0.0,0.0,R[:,200]...], w = 2, xaxis = ("time",(-0.25,10.), 0:1:10), yaxis=("real rate",(-0.02, 0.0325)) )
+# Plots.hline!([rr_end], line=(1.0,:dash, :red) , label = "")
+
+# # comparing the error on the BOND_mkt
+# time = linspace(0.0, 50., 401)
+# Plots.plot(time, BOND_mkt[:,[1,200]], xaxis = ("time",(0.0,50.)), w = 2.)
+
+"""
+    Transition dynamics
+    *   Solve the HJB backwards
+    *   Solve the KFE forward
+"""
+function transition_dynamics(R, BOND_mkt, BOND_mkt_clear_dist, sol_init, sol_end, rr_end, fd_end, r_guess = ones(401)*rr_end)
 
     nb = fd_end.nb; nz = fd_end.nz; Nn = nb*nz
     Δb = fd_end.Δb
     In = speye(Nn)
-    Bgrid = repmat(fd.bgrid,fd.nz)
-
-    M = 50;
-    xM = ones(Float64,M)/M
+    Bgrid = repmat(fd_end.bgrid,nz)
 
     #== Time index ==#
     T = 50; ntime = 401;
     Δt = T/(ntime-1);
-    ξ = 10.;
+    ξ = 10.*ones(ntime);
+
     #== Create sol_transition ==#
-    sol_transition = Vector{Solution}(ntime);
     sol_transition = Vector{Solution}(ntime);
     for ii = 1:ntime
         sol_transition[ii] = Solution(fd_end)
@@ -266,46 +333,51 @@ function transition_dynamics(sol_init, sol_end, fd_end)
     sol_transition[1].g .= sol_init.g;
     sol_transition[end].Vv .= sol_end.Vv;
 
-    r_transition = zeros( ntime ); r_transition .= r_end; rnew_transition = zeros( ntime ); rnew_transition2 = zeros( ntime );
+    r_transition = zeros( ntime ); r_transition .= r_guess;
+    rnew_transition = zeros( ntime ); rnew_transition2 = zeros( ntime );
     bond_mkt = zeros( ntime ); dbond_mkt = zeros( ntime);
     V_out = zeros(Nn); dens = zeros(Nn);
 
-    bond_mkt_clear = 1.0
+    bond_mkt_clear_dist = 1.0
     it = 1
-    while bond_mkt_clear > 1e-5 && it<=10
+    while bond_mkt_clear_dist > 1e-5 && it <= 1 # 200
 
         #== Iterate backwards on the HJB ==#
+        R[:,it] = r_transition;
         for tt in ntime-1:-1:1
 
             V = sol_transition[tt+1].V;
             Vv = sol_transition[tt+1].Vv;
 
             #== update value function ==#
-            updateV!(V_out, V, sol_transition[tt], fd_end, r_transition[tt], 100.)
+            updateV!(V_out, V, sol_transition[tt], fd_end, r_transition[tt], Δt)
 
             distance = maximum(abs, Vv - V_out)
-            @printf(     "        value function iteration %d, distance %.4f \n", tt, distance)
+            # (tt%25 == 0) && @printf(     "        value function iteration %d, distance %.4f \n", tt, distance)
+            # (tt < 25)    && @printf(     "        value function iteration %d, distance %.4f \n", tt, distance)
 
             sol_transition[tt].Vv .= V_out ###  WARN WARN update V as well
         end
 
         #== Iterate forward on the KFE ==#
-        for tt in 2:ntime
+        for tt in 1:ntime-1
 
-            dens .= sol_transition[tt-1].g
-            g_np1 = sol_transition[tt].g
+            dens .= sol_transition[tt].g
+            g_np1 = sol_transition[tt+1].g
 
-            A_t = kfe_equation(sol_transition[tt-1].lsavings, fd_end);
+            A_t = kfe_equation(sol_transition[tt].lsavings, fd_end);
 
             # A_ldiv_B!(lufact(In - Δt*A_t), dens) ###  CAREFUL: updates V_out in-place     ###
             g_np1 .= (In - Δt*A_t)\dens;
 
-            bond_mkt[tt] = sum(Δb * Bgrid .* g_np1);
-            @printf(     "        kfe period %d, market clear %.4f \n", tt, bond_mkt[tt])
+            bond_mkt[tt+1] = sum(Δb * Bgrid .* g_np1);
+            # (tt%25 == 0) && @printf(     "        kfe period %d, market clear %.4f \n", tt, bond_mkt[tt])k
         end
+        bond_mkt_clear_dist = maximum(abs,bond_mkt)
 
-
-
+        @printf(     " ********** ITERATION %d: market clear (max) %.2e \n", it, bond_mkt_clear_dist)
+        BOND_mkt[:,it] = bond_mkt;
+        BOND_mkt_clear_dist[it] = bond_mkt_clear_dist;
         #Forward and backword approximations are used alternately because once
         #the excess savings level becomes small enough, the "rounding error" can
         #lead the update in the interest rate, and repeatedly adding the same
@@ -318,9 +390,9 @@ function transition_dynamics(sol_init, sol_end, fd_end)
             dbond_mkt[1] = dbond_mkt[2];
         end
         #Update the interest rate to reduce aggregate savings amount.
-        rnew_transition .= r_transition - ξ*dbond_mkt;
-
-        rnew_transition[ntime-5:ntime] = rnew_transition[ntime-5]; #This was done to minimize the "rounding error" at the end. Otherwise, the end point keeps decreasing
+        rnew_transition .= r_transition - ξ.*dbond_mkt;
+        rnew_transition[ntime-11:ntime] = rnew_transition[ntime-11]; #This was done to minimize the "rounding error" at the end. Otherwise, the end point keeps decreasing
+        # Rnew[:,it+1] = rnew_transition;
 
         #To improve speed, for the first few updates, the update will be done
         #fast, but to reduce wave pattern that gets created, updated interest
@@ -328,25 +400,28 @@ function transition_dynamics(sol_init, sol_end, fd_end)
         #being updated). After getting "good" initial starting r_t, standard update
         #with declining update weight will be used for convergence. Note that the
         #smoothing will be stopped before the convergence.
+        rnew_transition2 .= rnew_transition;
         if it<20
-            rnew_transition2 .= rnew_transition;
-            rnew_transition2[ntime-101:ntime] = r_end;                 #We know that r will approach the stationary value, so we will force smoothing around the stationary value.
-            rnew_transition2[101:ntime] .= QuantEcon.smooth(rnew_transition2[101:ntime],25)
-        # elseif it<60
-        #     rnew_transition(N-10:N)=r_st;
-        #     rnew_transition(100:N)=smooth(rnew_transition(100:N),10); #Amount of smooth will be reduced over time since not as strong of an update is necessary
-        # elseif it<100
-        #     rnew_transition(N-5:N)=r_st;
-        #     rnew_transition(100:N)=smooth(rnew_transition(100:N),5);
-        # elseif it==100
-        #     ξ=10*exp(-0.0006*(1:N));
-        # elseif it==150
-        #     ξ=10*exp(-0.00006*(1:N)); #Give bigger update weight to later times.
+            rnew_transition2[ntime-101:ntime] = rr_end;                 #We know that r will approach the stationary value, so we will force smoothing around the stationary value.
+            rnew_transition2[101:ntime] .= QuantEcon.smooth(rnew_transition2,51)[101:ntime];
+        elseif it<40
+            rnew_transition2[ntime-51:ntime] = rr_end;
+            rnew_transition2[101:ntime]  = QuantEcon.smooth(rnew_transition2,15)[101:ntime]; #Amount of smooth will be reduced over time since not as strong of an update is necessary
+        elseif it<80
+            rnew_transition2[ntime-51:ntime] = rr_end;
+            rnew_transition2[101:ntime]  = QuantEcon.smooth(rnew_transition2,7)[101:ntime]; #Amount of smooth will be reduced over time since not as strong of an update is necessary
+        elseif it==80
+            ξ .= 10.*exp.(-0.0005*collect(1:ntime));
+        elseif it==125
+            ξ .= 10.*exp.(-0.00005*collect(1:ntime)); #Give bigger update weight to later times.
         end
 
-        r_transition .= rnew_transition;
+        #== New iteration ==#
+        r_transition .= rnew_transition2;
         it += 1
     end
+
+    return sol_transition
 end
 
 """
@@ -391,12 +466,11 @@ end
 """
 function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd::FiniteDiff, rr::Float64, Δ::Float64 = 0.0, LHS::Bool =true)
 
-    @unpack Δhjb = __pars
+    @unpack Δhjb,ρ = __pars
 
     #== Info ==#
     nz = fd.nz; nb = fd.nb; Nn = nb*nz;
-    zgrid = fd.zgrid;
-    bgrid = fd.bgrid; Δb = fd.Δb
+    zgrid = fd.zgrid; bgrid = fd.bgrid; Δb = fd.Δb
 
     #== Sparse matrix values ==#
     I, J, Values = fd.I, fd.J, fd.Values
@@ -406,7 +480,7 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
     for (iz,zval) in enumerate(zgrid), (ib,bonds) in enumerate(bgrid)
         ibz = ib + (iz-1)*nb
 
-        #== Backward derivative ==#
+        #== BACKWARD derivative ==#
         if ib > 1
             dVb = (V[ib, iz] - V[ib-1, iz])/Δb
             cb, lsb, util_b = inv_mu(dVb, bonds, zval, rr)
@@ -417,7 +491,7 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
         end
         (lsb < 0.0) ? (valid_b = true) : (valid_b = false)
 
-        #== Forward derivative ==#
+        #== FORWARD derivative ==#
         if ib < nb
             dVf = (V[ib+1, iz] - V[ib, iz])/Δb
             cf, lsf, util_f = inv_mu( dVf, bonds, zval, rr )
@@ -430,7 +504,7 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
 
         #== No savings ==#
         c0     = rr * bonds + zval
-        util_0 = utilfn(c0)
+        util_0 = utilfn( max(c0,0.0) )  ###  WARN WARN important for very low intereste rates
 
         #== DECIDE which one to use ==#
         if valid_b & (~valid_f | (util_b>util_f)) & (util_b > util_0)
@@ -473,27 +547,42 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
         Values .*= (-1.) # pass it to the LHS
         # println(count)
 
-        #== Add the diagonals ==#
-        Np = fd.Np;
-        Ip, Jp, Valp = fd.Ip, fd.Jp, fd.Valp
+        if Δ == 0.0
 
-        I[count+1:count+Np] .= Ip
-        J[count+1:count+Np] .= Jp
-        Values[count+1:count+Np] .= Valp
+            #== Add the diagonals ==#
+            Np = fd.Np;
+            Ip, Jp, Valp = fd.Ip, fd.Jp, fd.Valp
 
-        B_mat = falves_sparse!(I[1:count+Np], J[1:count+Np], Values[1:count+Np], Nn, Nn, +, fd.klasttouch,
-                fd.csrrowptr, #csrcolval, csrnzval,
-                fd.csccolptr, fd.cscrowval, fd.cscnzval)
+            I[count+1:count+Np] .= Ip
+            J[count+1:count+Np] .= Jp
+            Values[count+1:count+Np] .= Valp
 
-        # nn = length(fd.cscrowval)
-        # deleteat!(fd.cscrowval,1:nn); deleteat!(fd.cscnzval,1:nn);
+            B_mat = falves_sparse!(I[1:count+Np], J[1:count+Np], Values[1:count+Np], Nn, Nn, +, fd.klasttouch,
+                    fd.csrrowptr, #csrcolval, csrnzval,
+                    fd.csccolptr, fd.cscrowval, fd.cscnzval)
 
-        ###  SOLVE the linear system
-            ###  CASE 01
-            (Δ == 0.) && (Δ = Δhjb)
+            ###  SOLVE the linear system
+            @. V_out = utilfn( sol.cons[:] ) + 1./Δhjb * V[:]
+            A_ldiv_B!(lufact(B_mat), V_out)                         ###  CAREFUL: updates V_out in-place     ###
+        else
+
+            #== Add the diagonal ==#
+            Nz = fd.Nz;
+            Iz, Jz, Valz = fd.Iz, fd.Jz, fd.Valz
+            diag_ind = Iz .== Jz ## NOTE indices on the diagonal
+
+            I[count+1:count+Nz] .= Iz
+            J[count+1:count+Nz] .= Jz
+            Values[count+1:count+Nz] .= -Valz .+ diag_ind.*(ρ + 1.0/Δ)
+
+            B_mat = falves_sparse!(I[1:count+Nz], J[1:count+Nz], Values[1:count+Nz], Nn, Nn, +, fd.klasttouch,
+                    fd.csrrowptr, #csrcolval, csrnzval,
+                    fd.csccolptr, fd.cscrowval, fd.cscnzval)
+
+            ###  SOLVE the linear system
             @. V_out = utilfn( sol.cons[:] ) + 1./Δ * V[:]
             A_ldiv_B!(lufact(B_mat), V_out)                         ###  CAREFUL: updates V_out in-place     ###
-
+        end
         fill!(I,0); fill!(J,0); fill!(Values,0.0)
     end
 

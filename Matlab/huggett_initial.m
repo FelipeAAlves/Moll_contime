@@ -45,14 +45,14 @@ v0(:,1) = (z(1) + r.*a).^(1-s)/(1-s)/rho;
 v0(:,2) = (z(2) + r.*a).^(1-s)/(1-s)/rho;
 
 
-R_r = linspace(0.04,-0.025,66)
+% R_r = linspace(0.04,-0.025,66)
 
-for ir=1:66;
+for ir=1:Ir;
 
-r = R_r(ir)
-% r_r(ir)=r;
-% rmin_r(ir)=rmin;
-% rmax_r(ir)=rmax;
+% r = R_r(ir) falves
+r_r(ir)=r;
+rmin_r(ir)=rmin;
+rmax_r(ir)=rmax;
 
 if ir>1
 v0 = V_r(:,:,ir-1);
@@ -155,20 +155,20 @@ V_r(:,:,ir) = V;
 
 S(ir) = g(:,1)'*a*da + g(:,2)'*a*da;
 
-%UPDATE INTEREST RATE
-% if S(ir)>crit_S
-%     disp('Excess Supply')
-%     rmax = r;
-%     r = 0.5*(r+rmin);
-% elseif S(ir)<-crit_S;
-%     disp('Excess Demand')
-%     rmin = r;
-%     r = 0.5*(r+rmax);
-% elseif abs(S(ir))<crit_S;
-%     display('Equilibrium Found, Interest rate =')
-%     disp(r)
-%     break
-% end
+% UPDATE INTEREST RATE
+if S(ir)>crit_S
+    disp('Excess Supply')
+    rmax = r;
+    r = 0.5*(r+rmin);
+elseif S(ir)<-crit_S;
+    disp('Excess Demand')
+    rmin = r;
+    r = 0.5*(r+rmax);
+elseif abs(S(ir))<crit_S;
+    display('Equilibrium Found, Interest rate =')
+    disp(r)
+    break
+end
 
 end
 

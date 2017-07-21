@@ -6,6 +6,8 @@ OUTPUT/*
 *.ipynb_checkpoints
 *.png
 *.txt
+*.eps
+_slides/figures/*
 
 ### Latex
 *.tex

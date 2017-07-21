@@ -60,9 +60,9 @@ for it=1:maxit
     disp(it)
     r_t = rnew;
     r_it(:,it)=r_t;
-    
+
     V = v_st;
-    
+
     for n=N1:-1:1
         v(:,:,n)=V;
         % forward difference
@@ -71,9 +71,9 @@ for it=1:maxit
         % backward difference
         dVb(2:I,:) = (V(2:I,:)-V(1:I-1,:))/da;
         dVb(1,:) = (z + r_t(n).*amin).^(-s); %state constraint boundary condition
-        
+
         I_concave = dVb > dVf; %indicator whether value function is concave (problems arise if this is not the case)
-        
+
         %consumption and savings with forward difference
         cf = dVf.^(-1/s);
         ssf = zz + r_t(n).*aa - cf;
@@ -83,7 +83,7 @@ for it=1:maxit
         %consumption and derivative of value function at steady state
         c0 = zz + r_t(n).*aa;
         dV0 = c0.^(-s);
-        
+
         % dV_upwind makes a choice of forward or backward differences based on
         % the sign of the drift
         If = ssf > 0; %positive drift --> forward difference
@@ -93,36 +93,36 @@ for it=1:maxit
         %Ib(I,:) = 1; If(I,:) = 0;
         %STATE CONSTRAINT at amin: USE BOUNDARY CONDITION UNLESS muf > 0:
         %already taken care of automatically
-        
+
         dV_Upwind = dVf.*If + dVb.*Ib + dV0.*I0; %important to include third term
         c = dV_Upwind.^(-1/s);
         u = c.^(1-s)/(1-s);
-        
+
         %CONSTRUCT MATRIX
         X = - min(ssb,0)/da;
         Y = - max(ssf,0)/da + min(ssb,0)/da;
         Z = max(ssf,0)/da;
-        
+
         A1=spdiags(Y(:,1),0,I,I)+spdiags(X(2:I,1),-1,I,I)+spdiags([0;Z(1:I-1,1)],1,I,I);
         A2=spdiags(Y(:,2),0,I,I)+spdiags(X(2:I,2),-1,I,I)+spdiags([0;Z(1:I-1,2)],1,I,I);
         A = [A1,sparse(I,I);sparse(I,I),A2] + Aswitch;
-        
+
         %%Note the syntax for the cell array
         A_t{n} = A;
         B = (1/dt + rho)*speye(2*I) - A;
-        
+
         u_stacked = [u(:,1);u(:,2)];
         V_stacked = [V(:,1);V(:,2)];
-        
+
         b = u_stacked + V_stacked/dt;
         V_stacked = B\b; %SOLVE SYSTEM OF EQUATIONS
-        
+
         V = [V_stacked(1:I),V_stacked(I+1:2*I)];
         ss = zz + r_t(n).*aa - c;
     end
-    
+
     %plot(a,v(:,:,1),a,v(:,:,N))
-    
+
     gg{1}=gg0;
     for n=1:N
         AT=A_t{n}';
@@ -132,12 +132,12 @@ for it=1:maxit
         %check(n) = gg(:,n)'*ones(2*I,1)*da;
         SS(n) = gg{n}(1:I)'*a*da + gg{n}(I+1:2*I)'*a*da;
     end
-    
+
     SS_it(:,it)=SS;
-    
+
     %Compute the change in the aggregate savings.
     SS(1)=0;    %This was done to increase the accuracy by a little (Otherwise dSS has a bigger noise at t=0).
-    
+
     %Forward and backword approximations are used alternately because once
     %the excess savings level becomes small enough, the "rounding error" can
     %lead the update in the interest rate, and repeatedly adding the same
@@ -149,10 +149,10 @@ for it=1:maxit
         dSS(2:N)=SS(2:N)-SS(1:N-1);
         dSS(1)=dSS(2);
     end
-    
+
     %Update the interest rate to reduce aggregate savings amount.
     rnew = r_t - xi'.*dSS;
-    
+
     rnew(N-5:N)=rnew(N-5); %This was done to minimize the "rounding error" at the end. Otherwise, the end point keeps decreasing
 
     %To improve speed, for the first few updates, the update will be done
@@ -175,7 +175,7 @@ for it=1:maxit
     elseif it==150
         xi=10*exp(-0.00006*(1:N)); %Give bigger update weight to later times.
     end
-    
+
     %This is plotting things to show how things are changing. This can be
     %removed for speed.
     if mod(it,20)==0
@@ -200,12 +200,13 @@ for it=1:maxit
         title('SS(N-20:N)');
         pause(0.1);
     end
-    
+
     Sdist(it) = max(abs(SS));
+    fprintf('Error: %.3e\n', Sdist(it));
     if Sdist(it)<convergence_criterion
         break
     end
-    
+
 end
 
 time = (1:N)'*dt;
@@ -302,7 +303,3 @@ xlabel('Wealth, $a$','interpreter','latex')
 ylabel('Densities, $g_i(a)$','interpreter','latex')
 title('t = \infty')
 print -depsc transition_distribution.eps
-
-
-
-
