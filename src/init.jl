@@ -24,7 +24,7 @@ using Roots
 using QuantEcon
 
 
-immutable Solution
+struct Solution
 
     ### Values
     g::Vector{Float64}          # Density over state space
@@ -34,7 +34,7 @@ immutable Solution
     lsavings::Array{Float64,2}      # Savings
 end
 
-immutable FiniteDiff
+struct FiniteDiff
 
     ### Asset grid
     bgrid::LinSpace{Float64}
