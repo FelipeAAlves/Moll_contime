@@ -269,7 +269,7 @@ function transition_dynamics(R, BOND_mkt, BOND_mkt_clear_dist, sol_init, sol_end
 
     bond_mkt_clear_dist = 1.0
     it = 1
-    while bond_mkt_clear_dist > 1e-5 && it <= 1 # 200
+    while bond_mkt_clear_dist > 1e-5 && it <= 200 # 1,200
 
         #== Iterate backwards on the HJB ==#
         R[:,it] = r_transition;
@@ -391,7 +391,10 @@ end
 
 
 """
-    UpdateV! loop version
+    Update value function
+### INPUT
+    - 'V_out'
+
 """
 function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd::FiniteDiff, rr::Float64, Δ::Float64 = 0.0, LHS::Bool =true)
 
@@ -410,7 +413,7 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
         ibz = ib + (iz-1)*nb
 
         #== BACKWARD derivative ==#
-        if ib > 1
+        if ib > 1 # only compute if ib>1
             dVb = (V[ib, iz] - V[ib-1, iz])/Δb
             cb, lsb, util_b = inv_mu(dVb, bonds, zval, rr)
             # inv_mu!(MUb, dVb, bonds, zval, rr )
@@ -431,7 +434,7 @@ function updateV!(V_out::Vector{Float64}, V::Matrix{Float64}, sol::Solution, fd:
         end
         (lsf > 0.0) ? (valid_f = true) : (valid_f = false)
 
-        #== No savings ==#
+        ### CASE NO savings === serve as state constraint boundary condition if needed
         c0     = rr * bonds + zval
         util_0 = utilfn( max(c0,0.0) )  ###  WARN WARN important for very low intereste rates
 
