@@ -5,6 +5,7 @@
 
 OUTPUT/*
 _doc/* ! rm the _doc files
+_doc
 *.ipynb_checkpoints
 *.png
 *.txt
