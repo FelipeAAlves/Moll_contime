@@ -2,13 +2,14 @@
 !OUTPUT/*
 !OUTPUT/.gitkeep
 !doc_work/
+
 OUTPUT/*
+_doc/* ! rm the _doc files
 *.ipynb_checkpoints
 *.png
 *.txt
 *.eps
 _slides/figures/*
-_doc/figures/*
 
 ### Latex
 *.tex
